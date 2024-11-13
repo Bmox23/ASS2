@@ -2,46 +2,71 @@ import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 import subprocess
+import cv2
+from pyzbar import pyzbar
 import time
-
-# Function to display the boot screen with progress bar
-def boot_screen():
-    boot = tk.Toplevel()
-    boot.title("MCC Encoding App - Booting")
-    boot.state('zoomed')
-
-    # Adding company logo
-    image_path = r"Z:\3 Encoding and Printing Files\Fonts and Images\Images\Company\MCC.png"
-    logo_image = Image.open(image_path)
-    logo_image = logo_image.resize((200, 100), Image.LANCZOS)
-    logo_photo = ImageTk.PhotoImage(logo_image)
-    logo_label = tk.Label(boot, image=logo_photo)
-    logo_label.image = logo_photo  # Keep a reference
-    logo_label.pack(pady=20)
-
-    # Adding progress bar
-    progress = ttk.Progressbar(boot, orient="horizontal", length=300, mode="determinate")
-    progress.pack(pady=20)
-
-    # Update progress bar
-    for i in range(101):
-        progress['value'] = i
-        boot.update_idletasks()
-        time.sleep(0.02)  # Simulate loading delay
-
-    boot.destroy()
+import threading
 
 # Creating the main window after boot screen
 root = tk.Tk()
 root.title("MCC Encoding App")
 root.state('zoomed')
 
-# Display boot screen
-boot_screen()
+# Function to decode barcode types
+def decode_barcode_type(barcode):
+    type_map = {
+        'EAN13': 'EAN-13',
+        'EAN8': 'EAN-8',
+        'UPCA': 'UPC-A',
+        'UPCE': 'UPC-E',
+        'CODE39': 'Code 39',
+        'CODE128': 'Code 128',
+        'ITF': 'Interleaved 2 of 5',
+        'QRCODE': 'QR Code',
+        'PDF417': 'PDF417',
+        'DATAMATRIX': 'Data Matrix',
+        'AZTEC': 'Aztec Code',
+        'CODABAR': 'Codabar',
+        'RSS14': 'GS1 DataBar',
+        'RSS_EXPANDED': 'GS1 DataBar Expanded'
+    }
+    return type_map.get(barcode.type, 'Unknown')
+
+# Function to scan barcode using the device's camera
+def scan_barcode():
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        result_label.config(text="Error: Unable to access the camera.")
+        return
+
+    result_label.config(text="Scanning... Press 'q' to quit.")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            result_label.config(text="Error: Failed to capture image.")
+            break
+
+        barcodes = pyzbar.decode(frame)
+        for barcode in barcodes:
+            barcode_data = barcode.data.decode('utf-8')
+            barcode_type = decode_barcode_type(barcode)
+            result_label.config(text=f"Detected {barcode_type} barcode: {barcode_data}")
+            cap.release()
+            cv2.destroyAllWindows()
+            return
+
+        cv2.imshow('Barcode Scanner - Press "q" to quit', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    result_label.config(text="No barcode detected.")
 
 # Function to be executed when an option is selected
 def on_select(event):
-    root.withdraw()
+    global result_label  # Declare result_label as a global variable
+    root.iconify()
     selection = combo_box.get()
     new_window = tk.Toplevel()
     new_window.title(selection)
@@ -121,7 +146,10 @@ def on_select(event):
     elif selection == "Bartender Info Verification":
         subprocess.Popen(["python", "Bartender_Info_Verification.py"])
     elif selection == "Barcode Verification":
-        subprocess.Popen(["python", "Barcode_Verification.py"])
+        scan_button = tk.Button(new_window, text="Scan Barcode", command=scan_barcode, bg="blue", fg="white")
+        scan_button.pack(pady=10)
+        result_label = tk.Label(new_window, text="", justify="left")
+        result_label.pack(pady=10)
     elif selection == "UPC & Serial Breakdown":
         subprocess.Popen(["python", "UPC_Serial_Breakdown.py"])
 
